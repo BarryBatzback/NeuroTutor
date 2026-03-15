@@ -1,4 +1,3 @@
-# src/brain/cortex.py
 import networkx as nx
 import random
 import time
@@ -8,8 +7,9 @@ from .synapse import Synapse
 from .memory_manager import MemoryManager
 from .critical_thinking import CriticalThinking
 from .improvisation import Improvisation
-from .situational import SituationalAwareness  # ДОБАВЛЕНО
-
+from .situational import SituationalAwareness
+from .self_learning import SelfLearning
+from .unified_thinking import UnifiedThinkingEngine
 
 class Cortex:
     def __init__(self, load_from_file: str = None):
@@ -25,7 +25,9 @@ class Cortex:
         # Инициализация модулей
         self.critical_thinking = CriticalThinking(self)
         self.improvisation = Improvisation(self, self.critical_thinking)
-        self.situational = SituationalAwareness(self)  #
+        self.self_learning = SelfLearning(self, self.critical_thinking, self.improvisation)
+        self.situational = SituationalAwareness(self)
+        self.unified_thinking = UnifiedThinkingEngine(self)
 
         if load_from_file:
             self.load(load_from_file)
@@ -115,10 +117,21 @@ class Cortex:
         return all_activated
 
     def search_knowledge(self, query: str) -> list:
-        """Поиск знаний"""
+        """Улучшенный поиск знаний по запросу"""
         results = []
         query_lower = query.lower()
         query_words = query_lower.split()
+
+        # Расширим поиск на однокоренные слова
+        word_roots = {
+            'нагрузк': ['нагрузка', 'нагрузки', 'нагрузке', 'нагрузкой'],
+            'балк': ['балка', 'балки', 'балке', 'балкой', 'балок'],
+            'гравит': ['гравитация', 'гравитации', 'гравитацию', 'тяготение'],
+            'автомобил': ['автомобиль', 'автомобиля', 'автомобиле', 'авто', 'машина'],
+            'строитель': ['строительство', 'строитель', 'строения', 'конструкц'],
+            'спутник': ['спутник', 'спутника', 'спутнике', 'спутников'],
+            'дифференциал': ['дифференциал', 'дифференциала', 'дифференциале']
+        }
 
         for node_id, data in self.graph.nodes(data=True):
             neuron = data.get('neuron')
@@ -126,16 +139,43 @@ class Cortex:
                 continue
 
             content_lower = neuron.content.lower()
+            content_words = content_lower.split()
 
+            # 1. Проверяем точное вхождение
             if query_lower in content_lower:
                 results.append(neuron)
                 continue
 
-            content_words = content_lower.split()
+            # 2. Проверяем вхождение отдельных слов
             matches = sum(1 for word in query_words if word in content_words)
             if matches >= 1:
                 results.append(neuron)
+                continue
 
+            # 3. Проверяем однокоренные слова
+            for root, variations in word_roots.items():
+                if root in query_lower:
+                    if any(var in content_lower for var in variations):
+                        results.append(neuron)
+                        break
+
+            # 4. Проверяем ключевые понятия
+            key_concepts = {
+                'гравитация': ['притягивает', 'тяготение', 'gravity', 'спутник', 'орбита'],
+                'вода': ['кипит', 'замерзает', 'жидкость', 'h2o'],
+                'земля': ['планета', 'шар', 'круглая', 'сферическая'],
+                'автомобиль': ['колёса', 'двигатель', 'трансмиссия', 'дифференциал'],
+                'строительство': ['бетон', 'конструкц', 'нагрузк', 'балк', 'фундамент']
+            }
+
+            for concept, keywords in key_concepts.items():
+                if concept in query_lower:
+                    if any(keyword in content_lower for keyword in keywords):
+                        if neuron not in results:
+                            results.append(neuron)
+                        break
+
+        # Убираем дубликаты
         seen = set()
         unique_results = []
         for neuron in results:

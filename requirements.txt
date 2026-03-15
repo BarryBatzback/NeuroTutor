@@ -1,3 +1,5 @@
+# requirements.txt
+
 # Ядро
 networkx>=3.0
 numpy>=1.24.0
@@ -14,8 +16,8 @@ deep-translator>=1.11.4
 wikipedia>=1.4.0
 wikipedia-api>=0.5.4
 arxiv>=1.4.0
-requests>=2.28.0
 aiohttp>=3.8.0
+requests>=2.28.0
 
 # Документы
 PyPDF2>=3.0.0
@@ -29,10 +31,3 @@ pytesseract>=0.3.10
 # Утилиты
 beautifulsoup4>=4.11.0
 PyYAML>=6.0
-
-# Образовательные API
-wikipedia>=1.4.0
-wikipedia-api>=0.5.4
-arxiv>=1.4.0
-google>=3.0.0
-googlesearch-python>=1.2.0

@@ -1,456 +1,364 @@
 # src/brain/situational.py
 import re
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 from datetime import datetime
 import numpy as np
-from collections import Counter
 
 
 class SituationalAwareness:
     """
-    Модуль ситуативной осведомленности
-    Понимает контекст, настроение, срочность и адаптирует общение
+    Модуль ситуативности - понимание контекста и адаптация поведения
+    Позволяет ИИ учитывать обстоятельства, настроение пользователя,
+    время, место и другие контекстуальные факторы
     """
 
     def __init__(self, brain):
         self.brain = brain
-
-        # Текущий контекст
         self.context = {
-            'user_id': None,
             'time': None,
-            'urgency': 0.5,  # 0 - спокойно, 1 - срочно
-            'mood': 'neutral',  # neutral, happy, sad, angry, confused, curious
+            'user_mood': None,
+            'urgency': 0.5,
+            'complexity_preference': 0.5,
             'conversation_history': [],
-            'topic_focus': None,
-            'formality': 0.5,  # 0 - неформально, 1 - формально
-            'expertise_level': 0.5  # 0 - новичок, 1 - эксперт
+            'user_expertise': 'intermediate'
         }
-
-        # Словари для анализа эмоций
         self.emotion_keywords = {
-            'happy': [
-                'рад', 'отлично', 'прекрасно', 'спасибо', 'класс', 'удивительно',
-                'замечательно', 'восхищаюсь', 'счастлив', 'доволен', 'круто',
-                'супер', 'восхитительно', 'потрясающе', 'великолепно'
-            ],
-            'sad': [
-                'грустно', 'плохо', 'устал', 'проблема', 'ошибка', 'не работает',
-                'разочарован', 'печально', 'тяжело', 'больно', 'ужасно',
-                'кошмар', 'отвратительно', 'мерзко'
-            ],
-            'angry': [
-                'бесит', 'ужасно', 'когда', 'почему', 'неправильно', 'глупость',
-                'возмущён', 'злой', 'раздражает', 'невыносимо', 'достал',
-                'ненавижу', 'отстой', 'фу'
-            ],
-            'confused': [
-                'не понимаю', 'как', 'что', 'зачем', 'объясни', 'помогите',
-                'запутался', 'сложно', 'неясно', 'вопрос', 'странно',
-                'непонятно', 'загадка', 'тайна'
-            ],
-            'curious': [
-                'интересно', 'любопытно', 'хочу узнать', 'расскажи', 'почему',
-                'как работает', 'объясни', 'подробнее', 'увлекательно',
-                'захватывающе', 'интригующе'
-            ]
+            'positive': ['рад', 'отлично', 'замечательно', 'спасибо', 'круто', 'супер'],
+            'negative': ['грустно', 'плохо', 'не понимаю', 'сложно', 'устал', 'проблема'],
+            'confused': ['непонятно', 'запутался', 'как', 'почему', 'что'],
+            'urgent': ['срочно', 'быстро', 'немедленно', 'сейчас', 'важно']
         }
-
-        # Ключевые слова срочности
-        self.urgency_keywords = [
-            'срочно', 'быстро', 'немедленно', 'asap', 'горит',
-            'важно', 'скорее', 'безотлагательно', 'экстренно',
-            'когда', 'скоро', 'время', 'дедлайн', 'срок', 'сейчас'
-        ]
-
-        # Индикаторы формальности
-        self.formality_indicators = {
-            'formal': [
-                'уважаемый', 'просьба', 'благодарю', 'будьте добры',
-                'не могли бы', 'извините', 'разрешите', 'почтенный'
-            ],
-            'informal': [
-                'привет', 'пока', 'ок', 'спс', 'чё', 'как дела',
-                'здорово', 'ку', 'хай', 'йоу'
-            ]
-        }
-
-        # История взаимодействий для обучения
-        self.interaction_history = []
-
         print("🌍 Модуль ситуативности инициализирован")
 
-    def update_context(self, user_id: str, user_input: str, timestamp: datetime = None):
+    def analyze_context(self, user_input: str, user_id: str = None) -> Dict:
         """
-        Обновляет контекст на основе ввода пользователя
+        Анализирует контекст запроса пользователя
+        Args:
+            user_input: текст сообщения пользователя
+            user_id: идентификатор пользователя (опционально)
+        Returns:
+            Dict: анализированный контекст
         """
-        if timestamp is None:
-            timestamp = datetime.now()
+        context = self.context.copy()
 
-        self.context['user_id'] = user_id
-        self.context['time'] = timestamp
+        # Определяем время
+        context['time'] = self._get_time_context()
 
-        # Анализируем ввод
-        self.context['mood'] = self.detect_emotion(user_input)
-        self.context['urgency'] = self.detect_urgency(user_input)
-        self.context['formality'] = self.detect_formality(user_input)
-        self.context['topic_focus'] = self.extract_topic(user_input)
-        self.context['expertise_level'] = self.detect_user_expertise(user_input)
+        # Анализируем настроение
+        context['user_mood'] = self._detect_emotion(user_input)
+
+        # Определяем срочность
+        context['urgency'] = self._detect_urgency(user_input)
+
+        # Оцениваем сложность запроса
+        context['query_complexity'] = self._assess_complexity(user_input)
+
+        # Определяем тип запроса
+        context['query_type'] = self._identify_query_type(user_input)
 
         # Добавляем в историю
         self.context['conversation_history'].append({
-            'timestamp': timestamp,
-            'input': user_input[:200],
-            'mood': self.context['mood'],
-            'urgency': self.context['urgency']
+            'input': user_input[:100],
+            'timestamp': datetime.now(),
+            'context': context.copy()
         })
 
-        # Ограничиваем историю последними 20 сообщениями
-        if len(self.context['conversation_history']) > 20:
-            self.context['conversation_history'] = self.context['conversation_history'][-20:]
+        # Ограничиваем историю последними 10 сообщениями
+        if len(self.context['conversation_history']) > 10:
+            self.context['conversation_history'] = self.context['conversation_history'][-10:]
 
-        # Сохраняем в историю взаимодействий
-        self.interaction_history.append({
-            'timestamp': timestamp,
-            'input': user_input[:200],
-            'context': self.context.copy()
-        })
+        return context
 
-        return self.context
+    def _get_time_context(self) -> Dict:
+        """Определяет временной контекст"""
+        now = datetime.now()
+        hour = now.hour
 
-    # src/brain/situational.py - обнови detect_emotion
+        if 5 <= hour < 12:
+            period = 'morning'
+            energy_level = 0.8
+        elif 12 <= hour < 18:
+            period = 'afternoon'
+            energy_level = 0.7
+        elif 18 <= hour < 23:
+            period = 'evening'
+            energy_level = 0.5
+        else:
+            period = 'night'
+            energy_level = 0.3
 
-    def detect_emotion(self, text: str) -> str:
+        return {
+            'period': period,
+            'hour': hour,
+            'energy_level': energy_level,
+            'is_weekend': now.weekday() >= 5
+        }
+
+    def _detect_emotion(self, text: str) -> Dict:
+        """
+        Определяет эмоциональную окраску текста
+        """
         text_lower = text.lower()
-
-        # ПРОВЕРКА НА НЕЙТРАЛЬНЫЕ ФРАЗЫ
-        neutral_phrases = [
-            'привет', 'здравствуй', 'добрый день', 'добрый вечер',
-            'как дела', 'как жизнь', 'что нового', 'приветствую'
-        ]
-        if any(phrase in text_lower for phrase in neutral_phrases):
-            return 'neutral'
-
-        # Подсчет баллов с ВЕСАМИ для разных слов
-        scores = {emotion: 0 for emotion in self.emotion_keywords.keys()}
-
-        # Слова с высоким приоритетом для anger
-        anger_priority = ['бесит', 'достал', 'ненавижу', 'злой', 'раздражает']
-        # Слова с высоким приоритетом для sad
-        sad_priority = ['грустно', 'плохо', 'устал', 'печально', 'больно']
+        scores = {
+            'positive': 0,
+            'negative': 0,
+            'confused': 0,
+            'urgent': 0
+        }
 
         for emotion, keywords in self.emotion_keywords.items():
             for keyword in keywords:
                 if keyword in text_lower:
-                    # Повышенный вес для приоритетных слов
-                    if emotion == 'angry' and keyword in anger_priority:
-                        scores[emotion] += 1.5
-                    elif emotion == 'sad' and keyword in sad_priority:
-                        scores[emotion] += 1.5
-                    else:
-                        scores[emotion] += 1
+                    scores[emotion] += 1
+
+        # Нормализуем
+        total = sum(scores.values())
+        if total > 0:
+            scores = {k: v / total for k, v in scores.items()}
+
+        # Определяем доминирующую эмоцию
+        dominant = max(scores, key=scores.get) if max(scores.values()) > 0 else 'neutral'
+
+        return {
+            'dominant': dominant,
+            'scores': scores,
+            'intensity': max(scores.values())
+        }
+
+    def _detect_urgency(self, text: str) -> float:
+        """
+        Определяет уровень срочности запроса
+        """
+        urgent_words = ['срочно', 'быстро', 'немедленно', 'сейчас', 'важно',
+                        'экстренно', 'асп', 'помогите', 'нужно']
+        text_lower = text.lower()
+
+        urgency_score = sum(1 for word in urgent_words if word in text_lower)
 
         # Учитываем знаки препинания
-        if text.endswith('!!!'):
-            scores['angry'] += 0.5
-            scores['happy'] += 0.3
-        elif text.endswith('!'):
-            scores['angry'] += 0.3
+        if text.endswith('!') or text.endswith('!!!'):
+            urgency_score += 0.5
 
-        max_score = max(scores.values())
-        if max_score == 0:
-            return 'neutral'
+        return min(1.0, urgency_score / 3)
 
-        for emotion, score in scores.items():
-            if score == max_score:
-                return emotion
-
-        return 'neutral'
-
-    # В методе detect_urgency обнови:
-
-    def detect_urgency(self, text: str) -> float:
+    def _assess_complexity(self, text: str) -> float:
         """
-        Определяет уровень срочности (0.0 - 1.0)
+        Оценивает сложность запроса
         """
+        # Считаем количество технических терминов
+        technical_terms = [
+            'интеграл', 'производная', 'тензор', 'алгоритм', 'нейрон',
+            'квантовый', 'дифференциал', 'матрица', 'вектор', 'функция'
+        ]
+
         text_lower = text.lower()
-        urgency_count = 0.0
+        technical_count = sum(1 for term in technical_terms if term in text_lower)
 
-        # Слова с ВЫСОКИМ приоритетом (вес 1.0)
-        high_urgency = ['горит', 'немедленно', 'срочно', 'экстренно', 'asap']
-        for word in high_urgency:
-            if word in text_lower:
-                urgency_count += 1.0
+        # Оцениваем длину и структуру
+        words = text.split()
+        sentence_count = text.count('.') + text.count('?') + text.count('!')
 
-        # Слова со СРЕДНИМ приоритетом (вес 0.5)
-        medium_urgency = ['быстро', 'скорее', 'важно', 'когда', 'будет',
-                          'ждать', 'долг', 'дедлайн', 'срок', 'время']
-        for word in medium_urgency:
-            if word in text_lower:
-                urgency_count += 0.5
+        complexity = (
+                             len(words) / 20 +  # Длина
+                             technical_count / 3 +  # Технические термины
+                             sentence_count / 2  # Количество предложений
+                     ) / 3
 
-        # Знаки препинания
-        if text.endswith('!!!'):
-            urgency_count += 1.5
-        elif text.endswith('!!'):
-            urgency_count += 1.0
-        elif text.endswith('!'):
-            urgency_count += 0.5
+        return min(1.0, complexity)
 
-        # Короткие сообщения с вопросом (часто срочные)
-        if len(text) < 25 and '?' in text:
-            urgency_count += 0.3
-
-        # Нормализация (максимум 1.0)
-        return min(1.0, urgency_count / 2.5)
-
-    def detect_formality(self, text: str) -> float:
+    def _identify_query_type(self, text: str) -> str:
         """
-        Определяет уровень формальности (0.0 - 1.0)
+        Определяет тип запроса пользователя
         """
         text_lower = text.lower()
 
-        formal_score = sum(1 for word in self.formality_indicators['formal'] if word in text_lower)
-        informal_score = sum(1 for word in self.formality_indicators['informal'] if word in text_lower)
-
-        # Длина предложения тоже показатель
-        words = text.split()
-        if words:
-            avg_word_length = np.mean([len(word) for word in words])
-            if avg_word_length > 7:
-                formal_score += 0.5
-
-        total = formal_score + informal_score
-        if total == 0:
-            return 0.5
-
-        return formal_score / total
-
-    def extract_topic(self, text: str) -> Optional[str]:
-        """
-        Извлекает основную тему из сообщения
-        """
-        # Простая эвристика: ищем существительные с большой буквы
-        keywords = ['о', 'про', 'тема', 'вопрос', 'проблема', 'касается']
-        words = text.split()
-
-        for i, word in enumerate(words):
-            if word.lower() in keywords and i + 1 < len(words):
-                return words[i + 1].strip('.,!?')
-
-        # Если нет ключевых слов, берем первое значимое слово
-        for word in words:
-            clean_word = word.strip('.,!?')
-            if len(clean_word) > 4 and clean_word[0].isupper():
-                return clean_word
-
-        return None
-
-    def detect_user_expertise(self, user_input: str) -> float:
-        text_lower = user_input.lower()
-
-        # Технические термины (эксперт)
-        technical_indicators = [
-            'алгоритм', 'функция', 'параметр', 'переменная',
-            'класс', 'объект', 'метод', 'интерфейс',
-            'производная', 'интеграл', 'матрица', 'вектор',
-            'градиент', 'оптимизация', 'нейрон', 'сеть',
-            'квант', 'физика', 'химия', 'биология',
-            'архитектура', 'система', 'модуль', 'протокол'
-        ]
-
-        # Индикаторы новичка (ОБНОВЛЕНО!)
-        beginner_indicators = [
-            'что это', 'как начать', 'помогите', 'не понимаю',
-            'объясните', 'для чайников', 'простыми словами',
-            'новичок', 'первый раз', 'никогда не',
-            'такое', 'это такое', 'что такое'  # НОВЫЕ!
-        ]
-
-        tech_score = sum(1 for term in technical_indicators if term in text_lower)
-        beginner_score = sum(1 for term in beginner_indicators if term in text_lower)
-
-        total = tech_score + beginner_score
-        if total == 0:
-            return 0.5
-
-        # Если есть индикаторы новичка - возвращаем низкий уровень
-        if beginner_score > 0 and tech_score == 0:
-            return 0.2
-
-        return min(1.0, tech_score / max(total, 1))
-
-    def adapt_response(self, base_response: str, context: Dict = None) -> str:
-        if context is None:
-            context = self.context
-
-        mood = context.get('mood', 'neutral')
-        urgency = context.get('urgency', 0.5)
-
-        # ТОЛЬКО ОДИН префикс - срочность имеет приоритет
-        if urgency > 0.7:
-            adapted = self._make_concise(base_response)
-            prefix = "⚡ "  # ТОЛЬКО молния
-        elif mood == 'confused':
-            adapted = self._make_detailed(base_response, context.get('expertise_level', 0.5))
-            prefix = "📚 "  # ТОЛЬКО книга
-        elif mood == 'sad':
-            prefix = "💙 "
-            adapted = base_response + "\n\nЕсли что-то непонятно, я помогу разобраться!"
-        elif mood == 'curious':
-            prefix = "🔍 "
-            adapted = base_response + "\n\n🔎 Хотите узнать больше деталей?"
-        elif mood == 'happy':
-            prefix = "😄 "
-            adapted = base_response
-        elif mood == 'angry':
-            prefix = "😐 "
-            adapted = base_response
+        if any(word in text_lower for word in ['что такое', 'определение', 'это']):
+            return 'definition'
+        elif any(word in text_lower for word in ['как', 'способ', 'метод']):
+            return 'how_to'
+        elif any(word in text_lower for word in ['почему', 'причина', 'зачем']):
+            return 'why'
+        elif any(word in text_lower for word in ['реши', 'вычисли', 'найти']):
+            return 'problem_solving'
+        elif any(word in text_lower for word in ['сравни', 'разница', 'отличие']):
+            return 'comparison'
+        elif '?' in text:
+            return 'question'
         else:
-            prefix = ""
-            adapted = base_response
+            return 'statement'
 
-        return prefix + adapted  # БЕЗ дублирования
+    def adapt_response(self, response: str, context: Dict) -> str:
+        """
+        Адаптирует ответ под контекст ситуации
+        """
+        adapted = response
+
+        # Адаптация под срочность
+        if context['urgency'] > 0.7:
+            # Делаем ответ короче и прямее
+            adapted = self._make_concise(adapted)
+
+        # Адаптация под настроение
+        emotion = context['user_mood']['dominant']
+        if emotion == 'confused':
+            adapted = self._add_clarity(adapted)
+        elif emotion == 'negative':
+            adapted = self._add_empathy(adapted)
+
+        # Адаптация под время суток
+        if context['time']['period'] == 'night':
+            adapted = self._make_calmer(adapted)
+
+        # Адаптация под сложность
+        if context['query_complexity'] > 0.7:
+            adapted = self._add_detail(adapted)
+        else:
+            adapted = self._simplify(adapted)
+
+        return adapted
 
     def _make_concise(self, text: str) -> str:
-        """Делает ответ более кратким"""
-        # Удаляем вводные слова
-        intro_words = [
-            'например', 'вообще', 'собственно', 'таким образом',
-            'следовательно', 'более того', 'кроме того', 'итак'
-        ]
-        for word in intro_words:
-            text = text.replace(word, '')
-
-        # Ограничиваем длину
-        sentences = text.split('.')
-        if len(sentences) > 3:
-            text = '.'.join(sentences[:3]) + '.'
-
-        return text.strip()
-
-    def _make_detailed(self, text: str, expertise: float) -> str:
-        """Делает ответ более подробным"""
-        if expertise < 0.3:
-            # Для новичков
-            additions = [
-                "\n\n💡 *Простыми словами:* Давайте разберём на примере.",
-                "\n\n📌 *Важно:* Обратите внимание на ключевые моменты.",
-                "\n\n❓ *Есть вопросы?* Спрашивайте, я объясню подробнее!"
-            ]
-        elif expertise > 0.7:
-            # Для экспертов
-            additions = [
-                "\n\n🔬 *Технические детали:* Для углублённого изучения...",
-                "\n\n📊 *Данные:* Статистика показывает...",
-                "\n\n📚 *Литература:* Рекомендуется изучить..."
-            ]
-        else:
-            # Средний уровень
-            additions = [
-                "\n\n💡 *Пример:* Рассмотрим это на практике.",
-                "\n\n📌 *Ключевые моменты:* Запомните эти детали.",
-                "\n\n🔗 *Связь:* Это связано с тем, что мы обсуждали."
-            ]
-
-        return text + additions[0]
-
-    def _make_formal(self, text: str) -> str:
-        """Делает ответ более формальным"""
-        replacements = {
-            'привет': 'Здравствуйте',
-            'пока': 'До свидания',
-            'ок': 'Хорошо',
-            'спс': 'Благодарю',
-            'чё': 'что',
-            'щас': 'сейчас',
-            'давай': 'предлагаю',
-            'норм': 'удовлетворительно'
-        }
-        for informal, formal in replacements.items():
-            text = text.replace(informal, formal)
-
+        """Делает текст более кратким"""
+        # Убираем лишние подробности
+        sentences = text.split('. ')
+        if len(sentences) > 2:
+            return '. '.join(sentences[:2]) + '.'
         return text
 
-    def _make_informal(self, text: str) -> str:
-        """Делает ответ более неформальным"""
-        replacements = {
-            'Здравствуйте': 'Привет',
-            'До свидания': 'Пока',
-            'Благодарю': 'Спасибо',
-            'не могли бы': 'можешь',
-            'будьте добры': 'пожалуйста',
-            'предлагаю': 'давай',
-            'удовлетворительно': 'норм'
-        }
-        for formal, informal in replacements.items():
-            text = text.replace(formal, informal)
+    def _add_clarity(self, text: str) -> str:
+        """Добавляет пояснения для запутавшегося пользователя"""
+        return f"Давайте разберём по шагам:\n\n{text}\n\nЕсли что-то непонятно — спрашивайте!"
 
+    def _add_empathy(self, text: str) -> str:
+        """Добавляет эмпатию для расстроенного пользователя"""
+        return f"Понимаю, что это может быть непросто. 😊\n\n{text}\n\nМы разберёмся вместе!"
+
+    def _make_calmer(self, text: str) -> str:
+        """Делает тон более спокойным для ночного времени"""
+        return text.replace('!', '.').replace('ВАЖНО', 'важно')
+
+    def _add_detail(self, text: str) -> str:
+        """Добавляет детали для сложных запросов"""
+        return text + "\n\n📚 *Дополнительно:* Если нужны более глубокие объяснения — дайте знать!"
+
+    def _simplify(self, text: str) -> str:
+        """Упрощает текст для начинающих"""
+        # Простая замена сложных слов
+        simplifications = {
+            'интегрировать': 'объединить',
+            'дифференцировать': 'различать',
+            'оптимизировать': 'улучшить',
+            'имплементировать': 'реализовать'
+        }
+        for complex_word, simple_word in simplifications.items():
+            text = text.replace(complex_word, simple_word)
         return text
 
-    def get_context_summary(self) -> Dict:
+    def recommend_approach(self, query_type: str, context: Dict) -> Dict:
         """
-        Возвращает сводку текущего контекста
+        Рекомендует подход к ответу на основе типа запроса и контекста
         """
+        approaches = {
+            'definition': {
+                'structure': 'simple',
+                'include_examples': True,
+                'technical_depth': context['query_complexity']
+            },
+            'how_to': {
+                'structure': 'step_by_step',
+                'include_examples': True,
+                'technical_depth': 0.8
+            },
+            'why': {
+                'structure': 'causal_chain',
+                'include_examples': True,
+                'technical_depth': 0.9
+            },
+            'problem_solving': {
+                'structure': 'algorithmic',
+                'include_examples': True,
+                'technical_depth': 1.0
+            },
+            'comparison': {
+                'structure': 'table',
+                'include_examples': True,
+                'technical_depth': 0.7
+            },
+            'question': {
+                'structure': 'direct',
+                'include_examples': context['query_complexity'] > 0.5,
+                'technical_depth': context['query_complexity']
+            },
+            'statement': {
+                'structure': 'conversational',
+                'include_examples': False,
+                'technical_depth': 0.3
+            }
+        }
+
+        base_approach = approaches.get(query_type, approaches['question'])
+
+        # Корректируем под контекст
+        if context['urgency'] > 0.7:
+            base_approach['structure'] = 'direct'
+            base_approach['include_examples'] = False
+
+        if context['user_mood']['dominant'] == 'confused':
+            base_approach['technical_depth'] = min(0.5, base_approach['technical_depth'])
+
+        return base_approach
+
+    def get_user_profile(self, user_id: str) -> Dict:
+        """
+        Получает профиль пользователя на основе истории
+        """
+        history = self.context['conversation_history']
+
+        if not history:
+            return {
+                'expertise': 'unknown',
+                'preferred_complexity': 0.5,
+                'common_topics': [],
+                'interaction_count': 0
+            }
+
+        # Анализируем историю
+        topics = []
+        complexity_scores = []
+
+        for entry in history:
+            complexity_scores.append(entry['context'].get('query_complexity', 0.5))
+            # Здесь можно добавить извлечение тем
+
         return {
-            'user_id': self.context['user_id'],
-            'time': self.context['time'].strftime('%H:%M:%S') if self.context['time'] else None,
-            'mood': self.context['mood'],
-            'urgency': f"{self.context['urgency']:.2f}",
-            'formality': f"{self.context['formality']:.2f}",
-            'topic': self.context['topic_focus'],
-            'history_length': len(self.context['conversation_history']),
-            'expertise_level': f"{self.context['expertise_level']:.2f}"
+            'expertise': 'intermediate' if np.mean(complexity_scores) > 0.5 else 'beginner',
+            'preferred_complexity': np.mean(complexity_scores),
+            'common_topics': topics,
+            'interaction_count': len(history)
         }
 
-    def is_repeated_question(self, user_input: str, threshold: int = 5) -> bool:
-        """
-        Проверяет, задавал ли пользователь этот вопрос недавно
-        """
-        recent_history = self.context['conversation_history'][-threshold:]
-        for entry in recent_history:
-            if user_input.lower() in entry['input'].lower() or entry['input'].lower() in user_input.lower():
-                return True
-        return False
-
-    def learn_from_interaction(self, user_input: str, response: str, feedback: str = None):
-        """
-        Учится на взаимодействии с пользователем
-        """
-        interaction = {
-            'timestamp': datetime.now(),
-            'input': user_input[:200],
-            'response': response[:200],
-            'feedback': feedback,
-            'context': self.context.copy()
-        }
-
-        self.interaction_history.append(interaction)
-
-        # Если есть обратная связь, адаптируем стиль
-        if feedback:
-            if 'понятно' in feedback.lower() or 'спасибо' in feedback.lower():
-                # Пользователь доволен - сохраняем стиль
-                self.context['expertise_level'] = self.detect_user_expertise(user_input)
-            elif 'непонятно' in feedback.lower() or 'сложно' in feedback.lower():
-                # Нужно упростить
-                self.context['expertise_level'] = max(0, self.context['expertise_level'] - 0.1)
+    def update_user_expertise(self, user_id: str, new_level: str):
+        """Обновляет уровень экспертизы пользователя"""
+        if new_level in ['beginner', 'intermediate', 'advanced']:
+            self.context['user_expertise'] = new_level
 
     def get_statistics(self) -> Dict:
-        """
-        Статистика работы модуля ситуативности
-        """
-        mood_counts = {}
-        for entry in self.interaction_history:
-            mood = entry['context'].get('mood', 'neutral')
-            mood_counts[mood] = mood_counts.get(mood, 0) + 1
+        """Статистика работы модуля ситуативности"""
+        history = self.context['conversation_history']
+
+        emotions = [h['context']['user_mood']['dominant'] for h in history]
+        query_types = [h['context']['query_type'] for h in history]
 
         return {
-            'total_interactions': len(self.interaction_history),
-            'mood_distribution': mood_counts,
-            'average_urgency': float(np.mean([e['context'].get('urgency', 0.5)
-                                              for e in self.interaction_history])) if self.interaction_history else 0.5,
-            'average_formality': float(np.mean([e['context'].get('formality', 0.5)
-                                                for e in
-                                                self.interaction_history])) if self.interaction_history else 0.5
+            'total_interactions': len(history),
+            'emotion_distribution': {
+                emotion: emotions.count(emotion) / len(emotions) if emotions else 0
+                for emotion in ['positive', 'negative', 'confused', 'neutral']
+            },
+            'query_type_distribution': {
+                qtype: query_types.count(qtype) / len(query_types) if query_types else 0
+                for qtype in set(query_types)
+            },
+            'average_urgency': np.mean([h['context']['urgency'] for h in history]) if history else 0.5,
+            'average_complexity': np.mean([h['context']['query_complexity'] for h in history]) if history else 0.5
         }

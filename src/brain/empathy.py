@@ -1,6 +1,6 @@
 # src/brain/empathy.py
 class Empathy:
-    def empathize(self, user_mood, user_input):
-        # Подбор поддерживающих слов
-        # Мотивация
-        # Эмоциональная связь
+    """Распознавание и ответ на эмоции пользователя"""
+    def detect_emotion(self, text): ...
+    def generate_empathetic_response(self, emotion, context): ...
+    def build_rapport(self, user_history): ...

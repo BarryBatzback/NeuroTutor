@@ -12,8 +12,11 @@ except Exception as e:
 
 # Тест 2: wikipedia-api - ИСПРАВЛЕНО!
 try:
-    # НЕ передавай user_agent в конструктор!
-    wiki = wikipediaapi.Wikipedia('ru')
+    # ПРАВИЛЬНАЯ ИНИЦИАЛИЗАЦИЯ С USER_AGENT
+    wiki = wikipediaapi.Wikipedia(
+        language='ru',
+        user_agent='NeuroTutor/1.0 ( Educational AI Project )'
+    )
     page = wiki.page("Гравитация")
     print(f"✅ WikiAPI: {page.exists()}")
 except Exception as e:

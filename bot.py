@@ -40,8 +40,8 @@ BOT_TOKEN = "8651180805:AAHAayQaPC1hP7ktISsm5gEh6mPaZb7jdBw"
 # Инициализация бота
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
-
 # Загрузка мозга
+
 print("🧠 Загрузка мозга...")
 brain = Cortex()
 try:
@@ -83,29 +83,59 @@ async def cmd_start(message: Message):
     )
 
 
-# В bot.py добавить:
-@dp.message(F.text)
+# В bot.py, замени handle_message на:
+
+@dp.message(F.text & ~F.command)
 async def handle_message(message: Message):
-    # 1. Обновить контекст ситуативности
-    brain.situational.update_context(user_id, message.text)
+    """Обработка текстовых сообщений через единое мышление"""
+    query = message.text
 
-    # 2. Критически оценить запрос
-    analysis = brain.critical_thinking.analyze_information(message.text)
+    # Показываем, что бот думает
+    await bot.send_chat_action(chat_id=message.chat.id, action="typing")
 
-    # 3. Если нужна творческая задача
-    if analysis['action'] == 'need_creativity':
-        solution = brain.improvisation.solve_creatively(message.text)
-        response = solution['solution']
+    # Контекст из сообщения
+    context = {
+        'user_id': message.from_user.id,
+        'chat_id': message.chat.id,
+        'timestamp': datetime.now()
+    }
+
+    # Обрабатываем через единый движок мышления
+    result = brain.unified_thinking.process_query(query, context)
+
+    # Формируем ответ
+    answer = result['final_answer']['text']
+    confidence = result['confidence']
+
+    # Добавляем индикатор уверенности
+    if confidence > 0.8:
+        confidence_mark = "✅"
+    elif confidence > 0.6:
+        confidence_mark = "🟡"
     else:
-        # 4. Обычный поиск
-        results = brain.think(message.text)
-        response = format_results(results)
+        confidence_mark = "🔶"
 
-    # 5. Адаптировать ответ под ситуацию
-    adapted = brain.situational.adapt_response(response)
+    response = f"{confidence_mark} {answer}"
 
-    await message.answer(adapted)
+    # Если есть дополнительные идеи (креативный режим)
+    if result['stages'].get('creative_solution', {}).get('brainstorm_ideas'):
+        response += "\n\n💡 Дополнительные идеи:"
+        for idea in result['stages']['creative_solution']['brainstorm_ideas'][:2]:
+            response += f"\n   • {idea}"
 
+    # Если есть пробелы в знаниях
+    knowledge = result['stages'].get('knowledge_retrieval', {})
+    if knowledge.get('knowledge_gaps'):
+        response += f"\n\n📚 Хотите, чтобы я изучил: {knowledge['knowledge_gaps'][0][:50]}...?"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📖 Да, изучи это", callback_data=f"learn_gap_{hash(query) % 10000}")]
+        ])
+        await message.answer(response, reply_markup=kb)
+    else:
+        await message.answer(response)
+
+    # Обучаемся на реакции (упрощённо)
+    # В реальном боте здесь можно отслеживать реакции пользователя
 @dp.callback_query()
 async def handle_callback(callback: types.CallbackQuery, state: FSMContext):
     data = callback.data

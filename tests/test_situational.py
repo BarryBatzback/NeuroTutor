@@ -1,10 +1,8 @@
 # tests/test_situational.py
 import sys
 from pathlib import Path
-from datetime import datetime
 
 sys.path.append(str(Path(__file__).parent.parent))
-
 from src.brain.cortex import Cortex
 
 
@@ -13,106 +11,54 @@ def test_situational():
     print("🌍 ТЕСТ МОДУЛЯ СИТУАТИВНОСТИ")
     print("=" * 70)
 
-    # Создаем мозг
     brain = Cortex()
 
-    # Тест 1: Определение настроения
-    print("\n🔍 ТЕСТ 1: Определение настроения")
-    test_cases = [
-        ("Я так рад, что это работает!", "happy"),
-        ("Ничего не понимаю, всё плохо", "sad"),
-        ("Это ужасно, почему так медленно?", "angry"),
-        ("Как это работает? Не понимаю", "confused"),
-        ("Очень интересно, расскажи подробнее", "curious"),
-        ("Привет, как дела?", "neutral")
-    ]
+    # Тест 1: Анализ обычного запроса
+    print("\n🔍 ТЕСТ 1: Обычный запрос")
+    context1 = brain.situational.analyze_context("Что такое нейронная сеть?")
+    print(f"📝 Запрос: Что такое нейронная сеть?")
+    print(f"🕐 Время: {context1['time']['period']} (энергия: {context1['time']['energy_level']})")
+    print(f"😊 Настроение: {context1['user_mood']['dominant']}")
+    print(f"⚡ Срочность: {context1['urgency']:.2f}")
+    print(f"📊 Сложность: {context1['query_complexity']:.2f}")
+    print(f"🎯 Тип: {context1['query_type']}")
 
-    for text, expected in test_cases:
-        brain.situational.update_context("user1", text)
-        mood = brain.situational.context['mood']
-        status = "✅" if mood == expected else "⚠️"
-        print(f"{status} '{text[:30]}...' → {mood} (ожидался {expected})")
-
-    # Тест 2: Определение срочности
-    print("\n🔍 ТЕСТ 2: Определение срочности")
-    urgency_tests = [
-        ("Сделай это срочно!!!", 0.8),
-        ("Когда будет готово?", 0.3),
-        ("Просто вопрос", 0.0),
-        ("Нужно немедленно! Горит!", 0.9)
-    ]
-
-    for text, min_urgency in urgency_tests:
-        brain.situational.update_context("user1", text)
-        urgency = brain.situational.context['urgency']
-        status = "✅" if urgency >= min_urgency else "⚠️"
-        print(f"{status} '{text[:30]}...' → {urgency:.2f} (минимум {min_urgency})")
+    # Тест 2: Срочный запутанный запрос
+    print("\n🔍 ТЕСТ 2: Срочный запутанный запрос")
+    context2 = brain.situational.analyze_context(
+        "СРОЧНО!!! Не понимаю, как решить эту задачу по интегралам, помогите!!!")
+    print(f"📝 Запрос: СРОЧНО!!! Не понимаю...")
+    print(
+        f"😊 Настроение: {context2['user_mood']['dominant']} (интенсивность: {context2['user_mood']['intensity']:.2f})")
+    print(f"⚡ Срочность: {context2['urgency']:.2f}")
+    print(f"📊 Сложность: {context2['query_complexity']:.2f}")
+    print(f"🎯 Тип: {context2['query_type']}")
 
     # Тест 3: Адаптация ответа
     print("\n🔍 ТЕСТ 3: Адаптация ответа")
-    base_response = "Нейронные сети используют матричные вычисления для обработки данных."
+    base_response = "Нейронная сеть — это вычислительная модель, вдохновлённая биологическими нейронными сетями."
 
-    # Срочный запрос
-    brain.situational.update_context("user1", "Срочно объясни!!!")
-    adapted_urgent = brain.situational.adapt_response(base_response)
-    print(f"⚡ Срочно:\n{adapted_urgent[:100]}...")
+    adapted_urgent = brain.situational.adapt_response(base_response, context2)
+    print(f"📄 Исходный: {base_response}")
+    print(f"⚡ Адаптированный под срочность: {adapted_urgent}")
 
-    # Запутанный пользователь
-    brain.situational.update_context("user1", "Не понимаю, как это работает?")
-    adapted_confused = brain.situational.adapt_response(base_response)
-    print(f"\n🤔 Запутанно:\n{adapted_confused[:150]}...")
+    # Тест 4: Рекомендация подхода
+    print("\n🔍 ТЕСТ 4: Рекомендация подхода")
+    approach = brain.situational.recommend_approach(context1['query_type'], context1)
+    print(f"🎯 Тип запроса: {context1['query_type']}")
+    print(f"📋 Рекомендуемая структура: {approach['structure']}")
+    print(f"💡 Включать примеры: {approach['include_examples']}")
+    print(f"📚 Глубина: {approach['technical_depth']:.2f}")
 
-    # Любопытный пользователь
-    brain.situational.update_context("user1", "Очень интересно! Расскажи подробнее")
-    adapted_curious = brain.situational.adapt_response(base_response)
-    print(f"\n🔍 Любопытно:\n{adapted_curious[:150]}...")
-
-    # Тест 4: Контекст разговора
-    print("\n🔍 ТЕСТ 4: История разговора")
-    for i in range(5):
-        brain.situational.update_context("user1", f"Вопрос номер {i}")
-
-    summary = brain.situational.get_context_summary()
-    print(f"📊 Сводка контекста:")
-    print(f"   Пользователь: {summary['user_id']}")
-    print(f"   Время: {summary['time']}")
-    print(f"   Настроение: {summary['mood']}")
-    print(f"   Срочность: {summary['urgency']}")
-    print(f"   Тема: {summary['topic']}")
-    print(f"   История: {summary['history_length']} сообщений")
-
-    # Тест 5: Повторяющиеся вопросы
-    print("\n🔍 ТЕСТ 5: Повторяющиеся вопросы")
-    brain.situational.update_context("user1", "Как дела?")
-    is_repeated = brain.situational.is_repeated_question("Как дела?")
-    print(f"{'✅' if is_repeated else '⚠️'} Повторный вопрос обнаружен: {is_repeated}")
-
-    is_repeated_new = brain.situational.is_repeated_question("Что нового?")
-    print(f"{'✅' if not is_repeated_new else '⚠️'} Новый вопрос корректен: {not is_repeated_new}")
-
-    # Тест 6: Оценка экспертизы пользователя
-    print("\n🔍 ТЕСТ 6: Оценка экспертизы")
-    expertise_tests = [
-        ("Что такое нейронная сеть? помоги начать", 0.3),
-        ("Как оптимизировать градиентный спуск в глубоких сетях?", 0.7),
-        ("Объясни простыми словами", 0.2)
-    ]
-
-    for text, expected_min in expertise_tests:
-        expertise = brain.situational.detect_user_expertise(text)
-        status = "✅" if expertise >= expected_min or text.find("простыми") >= 0 else "⚠️"
-        print(f"{status} '{text[:40]}...' → экспертиза: {expertise:.2f}")
-
-    # Статистика
-    print("\n" + "=" * 70)
-    print("📊 СТАТИСТИКА СИТУАТИВНОСТИ:")
+    # Тест 5: Статистика
+    print("\n🔍 ТЕСТ 5: Статистика")
     stats = brain.situational.get_statistics()
-    print(f"   Всего взаимодействий: {stats['total_interactions']}")
-    print(f"   Распределение настроений: {stats['mood_distribution']}")
-    print(f"   Средняя срочность: {stats['average_urgency']:.2f}")
-    print("=" * 70)
+    print(f"📊 Всего взаимодействий: {stats['total_interactions']}")
+    print(f"😊 Распределение эмоций: {stats['emotion_distribution']}")
+    print(f"🎯 Типы запросов: {stats['query_type_distribution']}")
 
-    print("\n✅ ТЕСТ СИТУАТИВНОСТИ ЗАВЕРШЕН!")
+    print("\n" + "=" * 70)
+    print("✅ Тест ситуативности завершён!")
 
 
 if __name__ == "__main__":

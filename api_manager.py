@@ -11,13 +11,14 @@ async def test_all_apis():
 
     results = {}
 
-    # Wikipedia - ИСПРАВЛЕНО
+    # Wikipedia - ИСПРАВЛЕНО: используем конкретный термин
     try:
         import wikipedia
         wikipedia.set_lang("ru")
-        page = wikipedia.page("Тест", auto_suggest=True)
+        # Используем конкретный термин вместо "Тест"
+        page = wikipedia.page("Физика", auto_suggest=True)
         results['Wikipedia'] = 'OK'
-        print(f"✅ Wikipedia: OK")
+        print(f"✅ Wikipedia: OK ({page.title})")
     except Exception as e:
         results['Wikipedia'] = 'FAIL'
         print(f"❌ Wikipedia: FAIL ({str(e)[:50]})")
@@ -25,7 +26,7 @@ async def test_all_apis():
     # arXiv
     try:
         import arxiv
-        search = arxiv.Search(query="test", max_results=1)
+        search = arxiv.Search(query="physics", max_results=1)
         list(search.results())
         results['arXiv'] = 'OK'
         print(f"✅ arXiv: OK")
@@ -36,7 +37,7 @@ async def test_all_apis():
     # Google Books
     try:
         url = "https://www.googleapis.com/books/v1/volumes"
-        params = {'q': 'test', 'maxResults': 1}
+        params = {'q': 'физика', 'maxResults': 1}
         response = requests.get(url, params=params, timeout=10)
         if response.status_code == 200:
             results['Google Books'] = 'OK'
