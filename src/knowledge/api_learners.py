@@ -34,11 +34,8 @@ class APILearner:
         # Настройка Wikipedia для разных языков
         self.wiki_apis = {}
         for lang in ['ru', 'en', 'de', 'fr', 'es', 'it', 'zh', 'ja']:
-            self.wiki_apis[lang] = wikipediaapi.Wikipedia(
-                language=lang,
-                extract_format=wikipediaapi.ExtractFormat.WIKI,
-                user_agent='NeuroTutor/1.0'
-            )
+            # ИСПРАВЛЕНО: не передавай user_agent как именованный аргумент
+            self.wiki_apis[lang] = wikipediaapi.Wikipedia(lang)
 
         print("🌐 API Learner инициализирован")
 

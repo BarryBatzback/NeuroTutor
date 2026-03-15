@@ -1,7 +1,9 @@
 import asyncio
 from src.brain.cortex import Cortex
 from config.settings import MODELS_DIR, BOT_TOKEN
-
+# В начале main.py добавь:
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 
 def test_brain():
     print("🚀 Запуск тестирования биологического мозга...")
