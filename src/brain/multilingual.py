@@ -8,16 +8,30 @@ import hashlib
 class MultilingualProcessor:
     """Многоязычный процессор"""
 
-    def __init__(self, brain):
+    def __init__(self, brain=None):
+        """
+        Инициализация многоязычного процессора
+        Args:
+            brain: экземпляр Cortex (опционально)
+        """
         self.brain = brain
         self.supported_languages = {
-            'ru': 'русский', 'en': 'english', 'de': 'german',
-            'fr': 'french', 'es': 'spanish', 'it': 'italian',
-            'ja': 'japanese', 'ko': 'korean', 'zh-cn': 'chinese'
+            'ru': 'русский',
+            'en': 'english',
+            'de': 'german',
+            'fr': 'french',
+            'es': 'spanish',
+            'it': 'italian',
+            'zh-cn': 'chinese',
+            'ja': 'japanese',
+            'ko': 'korean',
+            'ar': 'arabic',
+            'hi': 'hindi'
         }
         self.default_language = 'ru'
         self.translation_cache = {}
         print("🌍 Многоязычный процессор инициализирован")
+        print(f"   Поддерживается языков: {len(self.supported_languages)}")
 
     def detect_language(self, text: str) -> str:
         """Определение языка"""

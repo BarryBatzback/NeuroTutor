@@ -1,18 +1,18 @@
 # backend/main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import sys
 from pathlib import Path
+import asyncio
 
 # Добавляем путь к проекту
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.brain.cortex import Cortex
 from src.brain.multilingual import MultilingualProcessor
-from src.brain.critical_thinking import CriticalThinking
-from src.brain.improvisation import Improvisation
+from src.knowledge.api_learners import APILearner
 
 
 # Модели данных
@@ -20,6 +20,7 @@ class QueryRequest(BaseModel):
     query: str
     language: str = 'ru'
     depth: str = 'normal'  # fast, normal, deep
+    context: Optional[Dict] = {}
 
 
 class QueryResponse(BaseModel):
@@ -48,11 +49,17 @@ class BrainStats(BaseModel):
     thoughts: int
 
 
+class AutoLearnRequest(BaseModel):
+    topic: str
+    depth: str = 'basic'  # basic, medium, deep
+    sources: Optional[List[str]] = None
+
+
 # Инициализация FastAPI
 app = FastAPI(
     title="NeuroTutor API",
     description="API для ИИ с человеческим мышлением",
-    version="1.0.0"
+    version="2.0.0"
 )
 
 # CORS для фронтенда
@@ -67,24 +74,28 @@ app.add_middleware(
 # Глобальные переменные
 brain = None
 ml = None
+api_learner = None
 
 
 @app.on_event("startup")
 async def startup_event():
     """Инициализация при запуске"""
-    global brain, ml
+    global brain, ml, api_learner
 
     print("🧠 Инициализация мозга...")
     brain = Cortex()
 
     try:
-        brain.load("data/models/technical_brain.pkl")
+        brain.load("data/models/brain_after_learning.pkl")
         print("✅ Мозг загружен")
     except Exception as e:
         print(f"⚠️ Мозг не найден, создаём новый: {e}")
+        brain = Cortex()
 
     ml = MultilingualProcessor()
+    api_learner = APILearner(brain, ml)
     print("🌍 Многоязычный процессор готов")
+    print("🌐 API Learner готов")
 
 
 @app.get("/")
@@ -92,13 +103,23 @@ async def root():
     """Информация об API"""
     return {
         "name": "NeuroTutor API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "status": "running",
+        "modules": [
+            "critical_thinking",
+            "improvisation",
+            "situational_awareness",
+            "multilingual",
+            "self_learning"
+        ],
         "endpoints": [
             "/query",
             "/learn",
+            "/auto-learn",
             "/stats",
-            "/health"
+            "/health",
+            "/thinking/critical",
+            "/thinking/improvisation"
         ]
     }
 
@@ -109,63 +130,35 @@ async def health_check():
     return {
         "status": "healthy",
         "brain_loaded": brain is not None,
-        "neurons": brain.get_stats()['neurons'] if brain else 0
+        "neurons": brain.get_stats()['neurons'] if brain else 0,
+        "synapses": brain.get_stats()['synapses'] if brain else 0
     }
 
 
 @app.post("/query", response_model=QueryResponse)
 async def process_query(request: QueryRequest):
     """
-    Обработка запроса к мозгу
+    Обработка запроса через все модули мышления
     """
     if not brain:
         raise HTTPException(status_code=500, detail="Мозг не инициализирован")
 
-    # Определяем язык запроса
-    detected_lang = ml.detect_language(request.query)
+    # Обрабатываем через единый интерфейс
+    result = brain.process_query(request.query, request.context)
 
-    # Поиск в мозге
-    results = brain.think(request.query)
+    # Определяем источники
+    sources = []
+    if result['knowledge_used'] > 0:
+        sources.append("internal_knowledge")
+    if result['thinking_process'].get('creativity_applied', False):
+        sources.append("improvisation")
 
-    # Формируем ответ
-    if results:
-        answer_parts = []
-        sources = []
-
-        for neuron, confidence, depth in results[:5]:
-            content = neuron.content
-
-            # Перевод если нужно
-            if detected_lang != request.language and confidence > 0.5:
-                neuron_lang = brain.graph.nodes[neuron.uid].get('language', 'ru')
-                if neuron_lang != request.language:
-                    content = ml.translate(content, request.language, neuron_lang)
-
-            answer_parts.append(f"• {content}")
-            sources.append(neuron.category)
-
-        answer = "\n".join(answer_parts)
-        avg_confidence = sum(c for _, c, _ in results[:5]) / len(results[:5])
-
-        thinking_process = {
-            'language_detected': detected_lang,
-            'results_found': len(results),
-            'depth': request.depth
-        }
-
-        return QueryResponse(
-            answer=answer,
-            confidence=round(avg_confidence, 2),
-            sources=list(set(sources)),
-            thinking_process=thinking_process
-        )
-    else:
-        return QueryResponse(
-            answer="К сожалению, у меня нет информации по этому вопросу. Вы можете обучить меня.",
-            confidence=0.0,
-            sources=[],
-            thinking_process={'language_detected': detected_lang, 'results_found': 0}
-        )
+    return QueryResponse(
+        answer=result['response'],
+        confidence=result['confidence'],
+        sources=sources,
+        thinking_process=result
+    )
 
 
 @app.post("/learn", response_model=LearnResponse)
@@ -178,14 +171,10 @@ async def learn_content(request: LearnRequest):
 
     try:
         # Создаём многоязычный нейрон
-        neurons = ml.create_multilingual_neuron(
-            brain,
-            request.content,
-            request.category
-        )
+        neurons = ml.create_multilingual_neuron(brain, request.content, request.category)
 
         # Сохраняем мозг
-        brain.save("technical_brain.pkl")
+        brain.save("brain_after_learning.pkl")
 
         return LearnResponse(
             success=True,
@@ -194,6 +183,25 @@ async def learn_content(request: LearnRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/auto-learn")
+async def auto_learn(request: AutoLearnRequest, background_tasks: BackgroundTasks):
+    """
+    Автоматическое обучение из интернета
+    """
+    if not api_learner:
+        raise HTTPException(status_code=500, detail="API Learner не инициализирован")
+
+    # Запускаем обучение в фоне (может занять время)
+    background_tasks.add_task(api_learner.auto_learn, request.topic, request.depth)
+
+    return {
+        "status": "learning_started",
+        "topic": request.topic,
+        "depth": request.depth,
+        "message": "Обучение запущено в фоновом режиме"
+    }
 
 
 @app.get("/stats", response_model=BrainStats)
@@ -214,23 +222,7 @@ async def get_stats():
     )
 
 
-@app.get("/categories")
-async def get_categories():
-    """
-    Список категорий знаний
-    """
-    if not brain:
-        raise HTTPException(status_code=500, detail="Мозг не инициализирован")
-
-    stats = brain.get_stats()
-
-    return {
-        "categories": stats['categories'],
-        "total": sum(stats['categories'].values())
-    }
-
-
-@app.post("/critical/analyze")
+@app.get("/thinking/critical")
 async def critical_analyze(query: str):
     """
     Критический анализ информации
@@ -250,7 +242,7 @@ async def critical_analyze(query: str):
     }
 
 
-@app.post("/improvisation/solve")
+@app.post("/thinking/improvisation")
 async def improvisation_solve(problem: str):
     """
     Творческое решение проблемы
@@ -265,6 +257,22 @@ async def improvisation_solve(problem: str):
         "solution": solution['solution'],
         "analogies": solution['analogies'],
         "confidence": solution['confidence']
+    }
+
+
+@app.get("/categories")
+async def get_categories():
+    """
+    Список категорий знаний
+    """
+    if not brain:
+        raise HTTPException(status_code=500, detail="Мозг не инициализирован")
+
+    stats = brain.get_stats()
+
+    return {
+        "categories": stats['categories'],
+        "total": sum(stats['categories'].values())
     }
 
 

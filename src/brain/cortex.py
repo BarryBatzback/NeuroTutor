@@ -1,5 +1,5 @@
+# src/brain/cortex.py
 import networkx as nx
-import random
 import time
 import hashlib
 from .neuron import Neuron
@@ -7,11 +7,16 @@ from .synapse import Synapse
 from .memory_manager import MemoryManager
 from .critical_thinking import CriticalThinking
 from .improvisation import Improvisation
+from .multilingual import MultilingualProcessor
 from .situational import SituationalAwareness
 from .self_learning import SelfLearning
-from .unified_thinking import UnifiedThinkingEngine
+
 
 class Cortex:
+    """
+    Главный класс мозга - интегрирует все модули мышления
+    """
+
     def __init__(self, load_from_file: str = None):
         self.graph = nx.DiGraph()
         self.memory = MemoryManager()
@@ -22,52 +27,33 @@ class Cortex:
         self.hebbian_factor = 0.05
         self.thought_count = 0
 
-        # Инициализация модулей
+        # === МОДУЛИ МЫШЛЕНИЯ (ВАЖЕН ПОРЯДОК!) ===
         self.critical_thinking = CriticalThinking(self)
         self.improvisation = Improvisation(self, self.critical_thinking)
+        self.multilingual = MultilingualProcessor(self)
+        self.situational = SituationalAwareness(self, self.critical_thinking)
         self.self_learning = SelfLearning(self, self.critical_thinking, self.improvisation)
-        self.situational = SituationalAwareness(self)
-        self.unified_thinking = UnifiedThinkingEngine(self)
 
         if load_from_file:
             self.load(load_from_file)
 
-
     def create_neuron(self, content: str, category: str = "general") -> Neuron:
-        """Создать нейрон"""
         unique_string = f"{content}{time.time()}"
         uid = hashlib.md5(unique_string.encode()).hexdigest()[:8]
         neuron = Neuron(uid=uid, content=content, category=category)
-
-        self.graph.add_node(
-            neuron.uid,
-            neuron=neuron,
-            category=category,
-            created_at=neuron.created_at
-        )
+        self.graph.add_node(neuron.uid, neuron=neuron, category=category)
         return neuron
 
     def create_synapse(self, pre_neuron: Neuron, post_neuron: Neuron, weight: float = 0.1) -> Synapse:
-        """Создать синапс"""
         if self.graph.has_edge(pre_neuron.uid, post_neuron.uid):
             return self.graph[pre_neuron.uid][post_neuron.uid]['synapse']
-
         synapse = Synapse(pre_neuron.uid, post_neuron.uid, weight)
-        self.graph.add_edge(
-            pre_neuron.uid,
-            post_neuron.uid,
-            synapse=synapse,
-            weight=weight,
-            created_at=time.time()
-        )
+        self.graph.add_edge(pre_neuron.uid, post_neuron.uid, synapse=synapse, weight=weight)
         return synapse
 
-    def add_knowledge(self, concept_id: str, content: str, category: str,
-                      related_concepts: list = None):
-        """Добавить знание"""
+    def add_knowledge(self, concept_id: str, content: str, category: str, related_concepts: list = None):
         neuron = Neuron(uid=concept_id, content=content, category=category)
         self.graph.add_node(neuron.uid, neuron=neuron, category=category)
-
         if related_concepts:
             for rel_id, weight in related_concepts:
                 if rel_id in self.graph.nodes:
@@ -76,7 +62,6 @@ class Cortex:
                     self.create_synapse(pre_neuron, post_neuron, weight)
 
     def think(self, input_concept: str) -> list:
-        """Процесс мышления"""
         self.thought_count += 1
         start_neurons = []
         input_lower = input_concept.lower()
@@ -96,11 +81,9 @@ class Cortex:
             if depth > 3 or current_neuron.uid in visited:
                 return
             visited.add(current_neuron.uid)
-
             output = current_neuron.stimulate(1.0 if depth == 0 else 0.5)
             if output > 0:
                 all_activated.append((current_neuron, output, depth))
-
                 for successor in self.graph.successors(current_neuron.uid):
                     edge_data = self.graph.get_edge_data(current_neuron.uid, successor)
                     if edge_data and 'synapse' in edge_data:
@@ -117,65 +100,23 @@ class Cortex:
         return all_activated
 
     def search_knowledge(self, query: str) -> list:
-        """Улучшенный поиск знаний по запросу"""
         results = []
         query_lower = query.lower()
         query_words = query_lower.split()
-
-        # Расширим поиск на однокоренные слова
-        word_roots = {
-            'нагрузк': ['нагрузка', 'нагрузки', 'нагрузке', 'нагрузкой'],
-            'балк': ['балка', 'балки', 'балке', 'балкой', 'балок'],
-            'гравит': ['гравитация', 'гравитации', 'гравитацию', 'тяготение'],
-            'автомобил': ['автомобиль', 'автомобиля', 'автомобиле', 'авто', 'машина'],
-            'строитель': ['строительство', 'строитель', 'строения', 'конструкц'],
-            'спутник': ['спутник', 'спутника', 'спутнике', 'спутников'],
-            'дифференциал': ['дифференциал', 'дифференциала', 'дифференциале']
-        }
 
         for node_id, data in self.graph.nodes(data=True):
             neuron = data.get('neuron')
             if not neuron:
                 continue
-
             content_lower = neuron.content.lower()
-            content_words = content_lower.split()
-
-            # 1. Проверяем точное вхождение
             if query_lower in content_lower:
                 results.append(neuron)
                 continue
-
-            # 2. Проверяем вхождение отдельных слов
+            content_words = content_lower.split()
             matches = sum(1 for word in query_words if word in content_words)
             if matches >= 1:
                 results.append(neuron)
-                continue
 
-            # 3. Проверяем однокоренные слова
-            for root, variations in word_roots.items():
-                if root in query_lower:
-                    if any(var in content_lower for var in variations):
-                        results.append(neuron)
-                        break
-
-            # 4. Проверяем ключевые понятия
-            key_concepts = {
-                'гравитация': ['притягивает', 'тяготение', 'gravity', 'спутник', 'орбита'],
-                'вода': ['кипит', 'замерзает', 'жидкость', 'h2o'],
-                'земля': ['планета', 'шар', 'круглая', 'сферическая'],
-                'автомобиль': ['колёса', 'двигатель', 'трансмиссия', 'дифференциал'],
-                'строительство': ['бетон', 'конструкц', 'нагрузк', 'балк', 'фундамент']
-            }
-
-            for concept, keywords in key_concepts.items():
-                if concept in query_lower:
-                    if any(keyword in content_lower for keyword in keywords):
-                        if neuron not in results:
-                            results.append(neuron)
-                        break
-
-        # Убираем дубликаты
         seen = set()
         unique_results = []
         for neuron in results:
@@ -185,8 +126,57 @@ class Cortex:
 
         return unique_results
 
+    def process_query(self, query: str, context: dict = None) -> dict:
+        """
+        Единый интерфейс для обработки запроса через все модули мышления
+        """
+        if context is None:
+            context = {}
+
+        # 1. Анализируем ситуацию
+        situational_context = self.situational.analyze_situation(query, context)
+
+        # 2. Ищем знания
+        knowledge = self.search_knowledge(query)
+
+        # 3. Критический анализ (если нужно)
+        if self.situational._is_factual_query(query):
+            analysis = self.critical_thinking.analyze_information(query)
+        else:
+            analysis = {'confidence': 0.7, 'conclusion': 'informational_query'}
+
+        # 4. Творческое решение (если знаний мало)
+        if len(knowledge) < 2 or self.situational._needs_creativity(query):
+            solution = self.improvisation.solve_creatively(query)
+            response = solution['solution']
+            confidence = solution['confidence']
+        else:
+            response = " | ".join([n.content[:100] for n in knowledge[:3]])
+            confidence = max([k[1] for k in self.think(query)]) if self.think(query) else 0.5
+
+        # 5. Адаптируем ответ под ситуацию
+        adapted_response = self.situational.adapt_response(response, situational_context, confidence)
+
+        # 6. Обучаемся на взаимодействии
+        self.self_learning.learn_from_interaction(query, adapted_response, success=True)
+
+        return {
+            'response': adapted_response,
+            'confidence': confidence,
+            'knowledge_used': len(knowledge),
+            'context': situational_context,
+            'analysis': analysis
+        }
+
+    def save(self, filename: str = None) -> str:
+        return self.memory.save_brain(self, filename)
+
+    def load(self, filepath: str):
+        data = self.memory.load_brain(filepath)
+        if data and 'graph' in data:
+            self.graph = data['graph']
+
     def get_stats(self) -> dict:
-        """Статистика мозга"""
         categories = {}
         for node_id, data in self.graph.nodes(data=True):
             cat = data.get('category', 'unknown')
@@ -198,45 +188,3 @@ class Cortex:
             'thoughts': self.thought_count,
             'categories': categories
         }
-
-    def save(self, filename: str = None) -> str:
-        """Сохранить мозг"""
-        import pickle
-        from pathlib import Path
-
-        if filename is None:
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"brain_{timestamp}.pkl"
-
-        save_dir = Path("data/models")
-        save_dir.mkdir(parents=True, exist_ok=True)
-        filepath = save_dir / filename
-
-        save_data = {
-            'graph': self.graph,
-            'stats': self.get_stats(),
-            'timestamp': time.time()
-        }
-
-        with open(filepath, 'wb') as f:
-            pickle.dump(save_data, f)
-
-        print(f"💾 Мозг сохранен: {filepath}")
-        return str(filepath)
-
-    def load(self, filepath: str):
-        """Загрузить мозг"""
-        import pickle
-        from pathlib import Path
-
-        filepath = Path(filepath)
-        if not filepath.exists():
-            print(f"❌ Файл не найден: {filepath}")
-            return
-
-        with open(filepath, 'rb') as f:
-            data = pickle.load(f)
-
-        if 'graph' in data:
-            self.graph = data['graph']
-            print(f"✅ Мозг загружен: {data.get('stats', {}).get('neuron_count', '?')} нейронов")
