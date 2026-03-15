@@ -1,0 +1,48 @@
+{
+  "sessions": [
+    {
+      "type": "internet",
+      "topic": "Новости науки",
+      "depth": "fast",
+      "neurons": 11,
+      "time": 14.46
+    },
+    {
+      "type": "internet",
+      "topic": "Технологические тренды",
+      "depth": "fast",
+      "neurons": 11,
+      "time": 15.12
+    },
+    {
+      "type": "internet",
+      "topic": "Искусственный интеллект",
+      "depth": "fast",
+      "neurons": 11,
+      "time": 14.06
+    },
+    {
+      "type": "internet",
+      "topic": "Новости науки",
+      "depth": "fast",
+      "neurons": 11,
+      "time": 18.85
+    },
+    {
+      "type": "internet",
+      "topic": "Технологические тренды",
+      "depth": "fast",
+      "neurons": 11,
+      "time": 18.2
+    },
+    {
+      "type": "internet",
+      "topic": "Искусственный интеллект",
+      "depth": "fast",
+      "neurons": 11,
+      "time": 16.51
+    }
+  ],
+  "total_neurons": 33,
+  "total_time": 53.56
+}
